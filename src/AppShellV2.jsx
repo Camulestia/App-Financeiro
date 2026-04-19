@@ -8,7 +8,6 @@ import DashboardPage from "./pages/DashboardPageV2";
 import ExpensesPage from "./pages/ExpensesPageInstallments";
 import FixedExpensesPage from "./pages/FixedExpensesPage";
 import FutureInstallmentsPage from "./pages/FutureInstallmentsPage";
-import ImportPage from "./pages/ImportPage";
 import IncomesPage from "./pages/IncomesPage";
 import MonthsPage from "./pages/MonthsPage";
 import PeoplePage from "./pages/PeoplePage";
@@ -21,7 +20,6 @@ const pages = {
   cartoes: { title: "Cartões", component: CardsPage },
   pessoas: { title: "Pessoas", component: PeoplePage },
   fixos: { title: "Fixos", component: FixedExpensesPage },
-  importar: { title: "Importar", component: ImportPage },
   parcelas: { title: "Parcelas futuras", component: FutureInstallmentsPage },
   graficos: { title: "Gráficos", component: ChartsPage },
 };

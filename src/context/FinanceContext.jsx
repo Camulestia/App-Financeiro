@@ -6,7 +6,6 @@ import {
   getExpenses,
   getFixedExpenses,
   getIncomes,
-  getPendingImports,
   getPeople,
   importAllData,
   removeExpenseGroup,
@@ -17,8 +16,8 @@ import {
   saveExpenses,
   saveFixedExpense,
   saveIncome,
-  savePendingImport,
   savePerson,
+  setDefaultPerson,
 } from "../services/storageService";
 import { generateInstallmentSchedule, normalizeExpenseForBilling } from "../utils/installmentUtils";
 
@@ -40,21 +39,19 @@ export function FinanceProvider({ children }) {
     people: [],
     cards: [],
     fixedExpenses: [],
-    pendingImports: [],
   });
   const [loading, setLoading] = useState(true);
 
   async function refresh() {
-    const [expenses, incomes, categories, people, cards, fixedExpenses, pendingImports] = await Promise.all([
+    const [expenses, incomes, categories, people, cards, fixedExpenses] = await Promise.all([
       getExpenses(),
       getIncomes(),
       getCategories(),
       getPeople(),
       getCards(),
       getFixedExpenses(),
-      getPendingImports(),
     ]);
-    setState({ expenses, incomes, categories, people, cards, fixedExpenses, pendingImports });
+    setState({ expenses, incomes, categories, people, cards, fixedExpenses });
     setLoading(false);
   }
 
@@ -72,7 +69,8 @@ export function FinanceProvider({ children }) {
 
   async function updateExpense(expense) {
     const card = state.cards.find((item) => item.id === expense.cartao);
-    await saveExpense(normalizeExpenseForBilling(expense, card ? [card] : []));
+    const { billingMonthKey, ...expenseForRecalculation } = expense;
+    await saveExpense(normalizeExpenseForBilling(expenseForRecalculation, card ? [card] : []));
     await refresh();
   }
 
@@ -100,18 +98,6 @@ export function FinanceProvider({ children }) {
     await refresh();
   }
 
-  async function addImportedExpense(expense, pendingId) {
-    if (isDuplicateExpense(state.expenses, expense)) throw new Error("Este item já existe");
-    await saveExpense(expense);
-    await removeRecord("pendingImports", pendingId);
-    await refresh();
-  }
-
-  async function discardImport(id) {
-    await removeRecord("pendingImports", id);
-    await refresh();
-  }
-
   const value = useMemo(
     () => ({
       ...state,
@@ -126,7 +112,11 @@ export function FinanceProvider({ children }) {
         await refresh();
       },
       addPerson: async (person) => {
-        await savePerson(person);
+        await savePerson({ ...person, isDefault: Boolean(person.isDefault) });
+        await refresh();
+      },
+      setDefaultPerson: async (personId) => {
+        await setDefaultPerson(personId);
         await refresh();
       },
       addCard: async (card) => {
@@ -137,12 +127,6 @@ export function FinanceProvider({ children }) {
         await saveFixedExpense(fixedExpense);
         await refresh();
       },
-      addPendingImport: async (item) => {
-        await savePendingImport(item);
-        await refresh();
-      },
-      addImportedExpense,
-      discardImport,
       removeExpense: async (id) => {
         await removeRecord("expenses", id);
         await refresh();

@@ -6,7 +6,6 @@ const menu = [
   { id: "cartoes", label: "Cartões", icon: "C" },
   { id: "pessoas", label: "Pessoas", icon: "P" },
   { id: "fixos", label: "Fixos", icon: "F" },
-  { id: "importar", label: "Importar", icon: "I" },
   { id: "parcelas", label: "Parcelas futuras", icon: "PF" },
   { id: "graficos", label: "Gráficos", icon: "G" },
 ];

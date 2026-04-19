@@ -18,17 +18,25 @@ const emptyForm = {
   cartao: "",
 };
 
+function getEmptyForm(defaultPersonId = "") {
+  return {
+    ...emptyForm,
+    pessoa: defaultPersonId,
+  };
+}
+
 function stripInstallmentLabel(description = "") {
   return description.replace(/\s\(\d+\/\d+\)$/, "");
 }
 
 export default function ExpenseForm({ categories, people, cards, onSubmit, initialExpense, editingScope, onCancel }) {
-  const [form, setForm] = useState(emptyForm);
+  const defaultPersonId = people.find((person) => person.isDefault)?.id || "";
+  const [form, setForm] = useState(() => getEmptyForm(defaultPersonId));
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
     if (!initialExpense) {
-      setForm(emptyForm);
+      setForm(getEmptyForm(defaultPersonId));
       return;
     }
 
@@ -58,7 +66,7 @@ export default function ExpenseForm({ categories, people, cards, onSubmit, initi
       pessoa: initialExpense.pessoa || "",
       cartao: initialExpense.cartao || "",
     });
-  }, [initialExpense, editingScope]);
+  }, [initialExpense, editingScope, defaultPersonId]);
 
   function validate() {
     const next = {};
@@ -114,7 +122,7 @@ export default function ExpenseForm({ categories, people, cards, onSubmit, initi
       });
     }
 
-    if (!initialExpense) setForm(emptyForm);
+    if (!initialExpense) setForm(getEmptyForm(defaultPersonId));
   }
 
   const isGroupEditing = initialExpense?.isInstallment && editingScope === "group";

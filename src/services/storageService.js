@@ -2,7 +2,7 @@ import { defaultCategories } from "../utils/defaultCategories";
 
 const DB_NAME = "financas-pessoais-db";
 const DB_VERSION = 1;
-const STORES = ["expenses", "incomes", "categories", "people", "cards", "fixedExpenses", "pendingImports"];
+const STORES = ["expenses", "incomes", "categories", "people", "cards", "fixedExpenses"];
 
 function openDatabase() {
   if (typeof indexedDB === "undefined") return Promise.reject(new Error("IndexedDB indisponível"));
@@ -141,13 +141,33 @@ export async function getCategories() {
 
 export const saveCategory = (category) => saveItem("categories", category);
 export const getPeople = () => getAll("people");
-export const savePerson = (person) => saveItem("people", person);
+export async function savePerson(person) {
+  if (!person.isDefault) return saveItem("people", person);
+  const people = await getPeople();
+  const updated = people
+    .filter((current) => current.id !== person.id)
+    .map((current) => ({ ...current, isDefault: false }));
+  const saved = { ...person, id: person.id || crypto.randomUUID(), isDefault: true, updatedAt: new Date().toISOString() };
+  await setAll("people", [...updated, saved]);
+  return saved;
+}
+export async function setDefaultPerson(personId) {
+  const people = await getPeople();
+  const updated = people.map((person) => ({
+    ...person,
+    isDefault: person.id === personId,
+  }));
+  await setAll("people", updated);
+  return updated;
+}
+export async function getPersonById(personId) {
+  const people = await getPeople();
+  return people.find((person) => person.id === personId) || null;
+}
 export const getCards = () => getAll("cards");
 export const saveCard = (card) => saveItem("cards", card);
 export const getFixedExpenses = () => getAll("fixedExpenses");
 export const saveFixedExpense = (fixedExpense) => saveItem("fixedExpenses", fixedExpense);
-export const getPendingImports = () => getAll("pendingImports");
-export const savePendingImport = (item) => saveItem("pendingImports", item);
 export const removeRecord = (storeName, id) => deleteItem(storeName, id);
 
 export async function replaceExpenseGroup(installmentGroupId, newExpenses) {

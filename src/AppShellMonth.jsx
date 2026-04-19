@@ -1,16 +1,16 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Sidebar from "./components/SidebarV2";
 import Topbar from "./components/Topbar";
 import { useFinance } from "./context/FinanceContext";
-import CardsPage from "./pages/CardsPageV2";
-import ChartsPage from "./pages/ChartsPageV2";
-import DashboardPage from "./pages/DashboardPageV2";
-import ExpensesPage from "./pages/ExpensesPageInstallments";
+import CardsPage from "./pages/CardsPageMonth";
+import ChartsPage from "./pages/ChartsPageMonth";
+import DashboardPage from "./pages/DashboardPagePeopleNav";
+import ExpensesPage from "./pages/ExpensesPageMonth";
 import FixedExpensesPage from "./pages/FixedExpensesPage";
 import FutureInstallmentsPage from "./pages/FutureInstallmentsPage";
-import IncomesPage from "./pages/IncomesPage";
+import IncomesPage from "./pages/IncomesPageMonth";
 import MonthsPage from "./pages/MonthsPage";
-import PeoplePage from "./pages/PeoplePage";
+import PeoplePage from "./pages/PeoplePageDRE";
 
 const pages = {
   dashboard: { title: "Dashboard", component: DashboardPage },
@@ -24,10 +24,20 @@ const pages = {
   graficos: { title: "Gráficos", component: ChartsPage },
 };
 
-export default function AppShell() {
+export default function AppShellMonth() {
   const [activePage, setActivePage] = useState("dashboard");
+  const [personDetailId, setPersonDetailId] = useState("");
   const { loading } = useFinance();
   const CurrentPage = useMemo(() => pages[activePage].component, [activePage]);
+
+  const openPersonDetail = useCallback((personId) => {
+    setPersonDetailId(personId);
+    setActivePage("pessoas");
+  }, []);
+
+  const clearPersonDetail = useCallback(() => {
+    setPersonDetailId("");
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 dark:bg-slate-950 dark:text-slate-100 lg:flex">
@@ -38,7 +48,11 @@ export default function AppShell() {
           {loading ? (
             <div className="card p-6 text-center text-slate-500 dark:text-slate-400">Carregando dados...</div>
           ) : (
-            <CurrentPage />
+            <CurrentPage
+              onOpenPersonDetail={openPersonDetail}
+              selectedPersonIdFromDashboard={personDetailId}
+              clearSelectedPersonFromDashboard={clearPersonDetail}
+            />
           )}
         </main>
       </div>

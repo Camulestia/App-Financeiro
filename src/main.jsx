@@ -1,16 +1,19 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import AppShell from "./AppShellV2.jsx";
+import AppShell from "./AppShellMonth.jsx";
 import { FinanceProvider } from "./context/FinanceContext.jsx";
+import { MonthProvider } from "./context/MonthContext.jsx";
 import { ThemeProvider } from "./context/ThemeContext.jsx";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ThemeProvider>
-      <FinanceProvider>
-        <AppShell />
-      </FinanceProvider>
+      <MonthProvider>
+        <FinanceProvider>
+          <AppShell />
+        </FinanceProvider>
+      </MonthProvider>
     </ThemeProvider>
   </React.StrictMode>
 );
