@@ -10,8 +10,7 @@ import {
 import * as storageService from "./storageService";
 
 const STORES = ["expenses", "incomes", "categories", "people", "cards", "fixedExpenses"];
-const SQLITE_STORES = ["people", "cards", "incomes", "fixedExpenses"];
-const PARTIAL_SQLITE_STORES = ["expenses"];
+const SQLITE_STORES = ["people", "cards", "incomes", "fixedExpenses", "expenses"];
 const STORE_GETTERS = {
   expenses: storageService.getExpenses,
   incomes: storageService.getIncomes,
@@ -48,11 +47,7 @@ async function shouldUseSQLite() {
 }
 
 async function shouldUseSQLiteStore(storeName) {
-  return (SQLITE_STORES.includes(storeName) || PARTIAL_SQLITE_STORES.includes(storeName)) && (await shouldUseSQLite());
-}
-
-function isRegularExpense(expense) {
-  return !expense?.isInstallment;
+  return SQLITE_STORES.includes(storeName) && (await shouldUseSQLite());
 }
 
 async function seedSQLiteStoreFromLegacyIfNeeded(storeName) {
@@ -63,8 +58,7 @@ async function seedSQLiteStoreFromLegacyIfNeeded(storeName) {
       if (sqliteItems.length) return;
 
       const legacyItems = await STORE_GETTERS[storeName]();
-      const itemsToSeed = storeName === "expenses" ? legacyItems.filter(isRegularExpense) : legacyItems;
-      if (itemsToSeed.length) await replaceSQLiteRecords(storeName, itemsToSeed);
+      if (legacyItems.length) await replaceSQLiteRecords(storeName, legacyItems);
     })().catch(() => null);
   }
   await sqliteSeedPromises[storeName];
@@ -87,13 +81,6 @@ async function replaceLegacyStore(storeName, items) {
 }
 
 async function getAll(storeName) {
-  if (storeName === "expenses" && (await shouldUseSQLiteStore(storeName))) {
-    await seedSQLiteStoreFromLegacyIfNeeded(storeName);
-    const regularExpenses = await getSQLiteRecords(storeName);
-    const installmentExpenses = (await storageService.getExpenses()).filter((expense) => expense.isInstallment);
-    return [...regularExpenses.filter(isRegularExpense), ...installmentExpenses];
-  }
-
   if (await shouldUseSQLiteStore(storeName)) {
     await seedSQLiteStoreFromLegacyIfNeeded(storeName);
     return getSQLiteRecords(storeName);
@@ -102,12 +89,6 @@ async function getAll(storeName) {
 }
 
 async function setAll(storeName, items) {
-  if (storeName === "expenses" && (await shouldUseSQLiteStore(storeName))) {
-    await replaceSQLiteRecords(storeName, items.filter(isRegularExpense));
-    await mirrorLegacy(() => replaceLegacyStore(storeName, items));
-    return items;
-  }
-
   if (await shouldUseSQLiteStore(storeName)) {
     await replaceSQLiteRecords(storeName, items);
     await mirrorLegacy(() => replaceLegacyStore(storeName, items));
@@ -119,9 +100,6 @@ async function setAll(storeName, items) {
 
 async function saveItem(storeName, item, legacySave) {
   const record = createRecord(item);
-  if (storeName === "expenses" && !isRegularExpense(record)) {
-    return legacySave(record);
-  }
 
   if (await shouldUseSQLiteStore(storeName)) {
     await seedSQLiteStoreFromLegacyIfNeeded(storeName);
@@ -133,13 +111,6 @@ async function saveItem(storeName, item, legacySave) {
 }
 
 async function deleteItem(storeName, id) {
-  if (storeName === "expenses" && (await shouldUseSQLiteStore(storeName))) {
-    await seedSQLiteStoreFromLegacyIfNeeded(storeName);
-    await deleteSQLiteRecord(storeName, id);
-    await mirrorLegacy(() => storageService.removeRecord(storeName, id));
-    return true;
-  }
-
   if (await shouldUseSQLiteStore(storeName)) {
     await seedSQLiteStoreFromLegacyIfNeeded(storeName);
     await deleteSQLiteRecord(storeName, id);
@@ -174,6 +145,15 @@ export const updateFixedExpense = saveFixedExpense;
 export const deleteFixedExpense = (id) => deleteItem("fixedExpenses", id);
 
 export async function saveExpenses(expenses) {
+  if (await shouldUseSQLiteStore("expenses")) {
+    await seedSQLiteStoreFromLegacyIfNeeded("expenses");
+    const records = expenses.map(createRecord);
+    const current = await getSQLiteRecords("expenses");
+    await replaceSQLiteRecords("expenses", [...current, ...records]);
+    await mirrorLegacy(() => storageService.saveExpenses(records));
+    return records;
+  }
+
   const saved = [];
   for (const expense of expenses) saved.push(await saveExpense(expense));
   return saved;
@@ -233,11 +213,17 @@ export const saveReimbursement = (reimbursement) =>
 export const deleteReimbursement = deleteIncome;
 
 export async function replaceExpenseGroup(installmentGroupId, newExpenses) {
-  return storageService.replaceExpenseGroup(installmentGroupId, newExpenses);
+  const current = await getExpenses();
+  const keep = current.filter((expense) => expense.installmentGroupId !== installmentGroupId);
+  const nextExpenses = [...keep, ...newExpenses.map(createRecord)];
+  await setAll("expenses", nextExpenses);
+  return nextExpenses.filter((expense) => expense.installmentGroupId === installmentGroupId);
 }
 
 export async function removeExpenseGroup(installmentGroupId) {
-  return storageService.removeExpenseGroup(installmentGroupId);
+  const keep = (await getExpenses()).filter((expense) => expense.installmentGroupId !== installmentGroupId);
+  await setAll("expenses", keep);
+  return true;
 }
 
 export async function exportAllData() {
@@ -253,7 +239,6 @@ export async function importAllData(fileData) {
     for (const store of SQLITE_STORES) {
       await replaceSQLiteRecords(store, Array.isArray(payload?.[store]) ? payload[store] : []);
     }
-    await replaceSQLiteRecords("expenses", Array.isArray(payload?.expenses) ? payload.expenses.filter(isRegularExpense) : []);
     await storageService.importAllData(fileData);
     return true;
   }
