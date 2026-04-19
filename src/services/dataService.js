@@ -19,6 +19,10 @@ const STORE_GETTERS = {
   cards: storageService.getCards,
   fixedExpenses: storageService.getFixedExpenses,
 };
+const SETTINGS = [
+  { key: "selectedMonth", localStorageKey: "financas:mesSelecionado" },
+  { key: "theme", localStorageKey: "financas:tema" },
+];
 
 let providerPromise = null;
 const sqliteSeedPromises = {};
@@ -78,6 +82,40 @@ async function replaceLegacyStore(storeName, items) {
     data[store] = store === storeName ? items : await STORE_GETTERS[store]();
   }
   await storageService.importAllData({ dados: data });
+}
+
+function getAppSettings() {
+  if (typeof localStorage === "undefined") return {};
+  return SETTINGS.reduce((settings, item) => {
+    const value = localStorage.getItem(item.localStorageKey);
+    return value ? { ...settings, [item.key]: value } : settings;
+  }, {});
+}
+
+function restoreAppSettings(settings = {}) {
+  if (typeof localStorage === "undefined" || !settings || typeof settings !== "object") return;
+  SETTINGS.forEach((item) => {
+    if (typeof settings[item.key] === "string") localStorage.setItem(item.localStorageKey, settings[item.key]);
+  });
+}
+
+function normalizeBackupPayload(fileData) {
+  if (!fileData || typeof fileData !== "object") throw new Error("Arquivo inválido");
+  const payload = fileData.dados && typeof fileData.dados === "object" ? fileData.dados : fileData;
+  const hasKnownStore = STORES.some((store) => Array.isArray(payload?.[store]));
+  if (!hasKnownStore) throw new Error("Arquivo inválido");
+
+  const normalized = {};
+  for (const store of STORES) {
+    if (payload?.[store] === undefined) normalized[store] = [];
+    else if (Array.isArray(payload[store])) normalized[store] = payload[store];
+    else throw new Error("Arquivo inválido");
+  }
+
+  return {
+    data: normalized,
+    settings: fileData.configuracoes || fileData.settings || payload.configuracoes || payload.settings || {},
+  };
 }
 
 async function getAll(storeName) {
@@ -229,19 +267,28 @@ export async function removeExpenseGroup(installmentGroupId) {
 export async function exportAllData() {
   const data = {};
   for (const store of STORES) data[store] = await getAll(store);
-  return { versao: 1, exportadoEm: new Date().toISOString(), dados: data };
+  return {
+    versao: 2,
+    exportadoEm: new Date().toISOString(),
+    origem: (await shouldUseSQLite()) ? "sqlite" : "storage",
+    dados: data,
+    configuracoes: getAppSettings(),
+  };
 }
 
 export async function importAllData(fileData) {
-  const payload = fileData?.dados ? fileData.dados : fileData;
+  const { data, settings } = normalizeBackupPayload(fileData);
 
   if (await shouldUseSQLite()) {
     for (const store of SQLITE_STORES) {
-      await replaceSQLiteRecords(store, Array.isArray(payload?.[store]) ? payload[store] : []);
+      await replaceSQLiteRecords(store, data[store]);
     }
-    await storageService.importAllData(fileData);
+    await storageService.importAllData({ dados: data });
+    restoreAppSettings(settings);
     return true;
   }
 
-  return storageService.importAllData(fileData);
+  await storageService.importAllData({ dados: data });
+  restoreAppSettings(settings);
+  return true;
 }

@@ -35,7 +35,7 @@ export default function BackupRestore() {
     link.download = `backup-financas-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    setMessage("Backup realizado com sucesso");
+    setMessage("Backup exportado com sucesso");
   }
 
   async function handleImport(event) {
@@ -43,9 +43,9 @@ export default function BackupRestore() {
     if (!file) return;
     try {
       await restoreData(JSON.parse(await file.text()));
-      setMessage("Dados restaurados com sucesso");
-    } catch {
-      setMessage("Erro ao importar arquivo");
+      setMessage("Dados importados com sucesso");
+    } catch (error) {
+      setMessage(error.message === "Arquivo inválido" ? "Arquivo inválido" : "Erro ao importar dados");
     } finally {
       event.target.value = "";
     }
