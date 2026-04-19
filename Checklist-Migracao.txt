@@ -1,0 +1,16 @@
+- Dashboard com filtro global de mês
+- Gastos simples
+- Gastos parcelados
+- Cartões
+- Faturas por cartão
+- Pessoas
+- Pessoa padrão
+- Receitas
+- Reembolsos
+- Página de meses
+- Página de pessoas com detalhamento
+- Página de cartões com detalhamento
+- Modo escuro
+- Backup/exportação JSON
+- Importação/restauração JSON
+- Executável desktop

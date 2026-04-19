@@ -50,6 +50,53 @@ export function normalizeExpenseForBilling(expense, cards = []) {
   };
 }
 
+function getFixedExpenseStartMonth(fixedExpense) {
+  const date = fixedExpense.billingMonthKey || fixedExpense.monthKey || fixedExpense.startDate || fixedExpense.data;
+  return date ? getMonthKey(date) : "";
+}
+
+function fixedExpenseAppliesToMonth(fixedExpense, monthKey) {
+  const startMonth = getFixedExpenseStartMonth(fixedExpense);
+  if (!startMonth) return true;
+  if (fixedExpense.billingMonthKey || fixedExpense.monthKey) return startMonth === monthKey;
+  if (startMonth > monthKey) return false;
+
+  const frequency = String(fixedExpense.frequencia || fixedExpense.frequency || "Mensal").toLowerCase();
+  if (frequency.includes("anual")) return startMonth.slice(5, 7) === monthKey.slice(5, 7);
+  return true;
+}
+
+export function getFixedExpensesForMonth(fixedExpenses = [], monthKey, cards = []) {
+  return fixedExpenses
+    .filter((fixedExpense) => fixedExpenseAppliesToMonth(fixedExpense, monthKey))
+    .map((fixedExpense) => {
+      const rawDate = fixedExpense.data || fixedExpense.startDate || `${monthKey}-01`;
+      const date = rawDate.length === 7 ? `${rawDate}-01` : rawDate;
+      const expense = {
+        ...fixedExpense,
+        id: `fixo-${fixedExpense.id}-${monthKey}`,
+        fixedExpenseId: fixedExpense.id,
+        descricao: fixedExpense.descricao,
+        valor: Number(fixedExpense.valor || 0),
+        data: date.startsWith(monthKey) ? date : `${monthKey}-01`,
+        purchaseDate: date.startsWith(monthKey) ? date : `${monthKey}-01`,
+        categoria: fixedExpense.categoria || fixedExpense.categoryId || "",
+        pessoa: fixedExpense.pessoa || fixedExpense.personId || "",
+        cartao: fixedExpense.cartao || fixedExpense.cardId || "",
+        personId: fixedExpense.personId || fixedExpense.pessoa || "",
+        cardId: fixedExpense.cardId || fixedExpense.cartao || "",
+        isFixed: true,
+        isInstallment: false,
+      };
+
+      return {
+        ...expense,
+        billingMonthKey: fixedExpense.billingMonthKey || getExpenseBillingMonth(expense, cards),
+      };
+    })
+    .filter((expense) => expense.billingMonthKey === monthKey);
+}
+
 export function generateInstallmentSchedule(form, card) {
   const installmentCount = Number(form.installmentCount || form.quantidadeParcelas || 0);
   const startDate = form.startDate || form.dataInicial;
@@ -98,10 +145,25 @@ export function getUpcomingInstallments(expenses, cards = [], fromMonthKey = get
     .sort((a, b) => a.billingMonthKey.localeCompare(b.billingMonthKey) || a.installmentIndex - b.installmentIndex);
 }
 
-export function getCardInvoiceSummaries(expenses, cards = [], monthKey) {
+function mergeFixedExpensesForMonth(expenses, fixedExpenses, cards, monthKey) {
+  const fixedEntries = getFixedExpensesForMonth(fixedExpenses, monthKey, cards);
+  const existingFixedIds = new Set(
+    expenses
+      .filter((expense) => expense.isFixed || expense.fixedExpenseId)
+      .map((expense) => `${expense.fixedExpenseId || expense.id}-${getExpenseBillingMonth(expense, cards)}`),
+  );
+
+  return [
+    ...expenses,
+    ...fixedEntries.filter((expense) => !existingFixedIds.has(`${expense.fixedExpenseId}-${monthKey}`)),
+  ];
+}
+
+export function getCardInvoiceSummaries(expenses, cards = [], monthKey, fixedExpenses = []) {
+  const allExpenses = mergeFixedExpensesForMonth(expenses, fixedExpenses, cards, monthKey);
   return cards
     .map((card) => {
-      const entries = expenses
+      const entries = allExpenses
         .map((expense) => normalizeExpenseForBilling(expense, cards))
         .filter((expense) => expense.cartao === card.id && expense.billingMonthKey === monthKey);
       return {
@@ -115,17 +177,27 @@ export function getCardInvoiceSummaries(expenses, cards = [], monthKey) {
     .filter((summary) => summary.entryCount > 0);
 }
 
-export function getMonthlySummary(expenses, incomes, cards = [], filters = {}) {
+export function getMonthlySummary(expenses, incomes, cards = [], fixedExpensesOrFilters = {}, maybeFilters = {}) {
+  const fixedExpenses = Array.isArray(fixedExpensesOrFilters) ? fixedExpensesOrFilters : [];
+  const filters = Array.isArray(fixedExpensesOrFilters) ? maybeFilters : fixedExpensesOrFilters;
   const normalizedExpenses = expenses.map((expense) => normalizeExpenseForBilling(expense, cards));
   const allMonths = new Set([
     ...normalizedExpenses.map((expense) => expense.billingMonthKey),
     ...incomes.map((income) => getMonthKey(income.data)),
+    ...fixedExpenses.map(getFixedExpenseStartMonth).filter(Boolean),
   ]);
+  if (filters.monthKey) allMonths.add(filters.monthKey);
+  if (fixedExpenses.some((expense) => !getFixedExpenseStartMonth(expense))) allMonths.add(getMonthKey(new Date().toISOString()));
 
   return [...allMonths]
     .sort()
     .map((monthKey) => {
-      const monthExpenses = normalizedExpenses.filter((expense) => expense.billingMonthKey === monthKey);
+      const monthExpenses = mergeFixedExpensesForMonth(
+        normalizedExpenses.filter((expense) => expense.billingMonthKey === monthKey),
+        fixedExpenses,
+        cards,
+        monthKey,
+      );
       const monthIncomes = incomes.filter((income) => getMonthKey(income.data) === monthKey);
       const filteredExpenses = monthExpenses.filter((expense) => {
         if (filters.pessoa && expense.pessoa !== filters.pessoa) return false;

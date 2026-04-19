@@ -18,7 +18,7 @@ import {
   saveIncome,
   savePerson,
   setDefaultPerson,
-} from "../services/storageService";
+} from "../services/dataService";
 import { generateInstallmentSchedule, normalizeExpenseForBilling } from "../utils/installmentUtils";
 
 const FinanceContext = createContext(null);

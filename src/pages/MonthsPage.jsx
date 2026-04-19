@@ -10,16 +10,17 @@ import { getMonthKey, getMonthlySummary } from "../utils/installmentUtils";
 export default function MonthsPage() {
   const { expenses, incomes, categories, people, cards, fixedExpenses } = useFinance();
   const [filters, setFilters] = useState({ ano: "", pessoa: "", categoria: "", cartao: "" });
+  const [selectedMonth, setSelectedMonth] = useState(getMonthKey(new Date().toISOString()));
   const summaries = useMemo(
     () =>
-      getMonthlySummary(expenses, incomes, cards, {
+      getMonthlySummary(expenses, incomes, cards, fixedExpenses, {
+        monthKey: selectedMonth,
         pessoa: filters.pessoa,
         categoria: filters.categoria,
         cartao: filters.cartao,
       }).filter((summary) => !filters.ano || summary.monthKey.startsWith(filters.ano)),
-    [expenses, incomes, cards, filters],
+    [expenses, incomes, cards, fixedExpenses, filters, selectedMonth],
   );
-  const [selectedMonth, setSelectedMonth] = useState(getMonthKey(new Date().toISOString()));
   const selected = summaries.find((summary) => summary.monthKey === selectedMonth) || summaries[summaries.length - 1];
   const years = [
     ...new Set([
@@ -126,7 +127,7 @@ export default function MonthsPage() {
               </div>
             </div>
           </section>
-          <CardInvoiceSummary expenses={expenses} cards={cards} monthKey={selected.monthKey} />
+          <CardInvoiceSummary expenses={expenses} fixedExpenses={fixedExpenses} cards={cards} monthKey={selected.monthKey} />
         </section>
       ) : null}
     </div>

@@ -8,7 +8,7 @@ import { getPeopleMonthlySummary } from "../services/financeLogic";
 import { formatCurrency } from "../utils/formatters";
 
 export default function PeoplePageDRE({ selectedPersonIdFromDashboard, clearSelectedPersonFromDashboard }) {
-  const { people, expenses, incomes, cards, categories, addPerson, removePerson, setDefaultPerson } = useFinance();
+  const { people, expenses, incomes, cards, categories, fixedExpenses, addPerson, removePerson, setDefaultPerson } = useFinance();
   const { selectedMonth } = useMonth();
   const [nome, setNome] = useState("");
   const [error, setError] = useState("");
@@ -34,7 +34,7 @@ export default function PeoplePageDRE({ selectedPersonIdFromDashboard, clearSele
     setError("");
   }
 
-  const peopleSummary = getPeopleMonthlySummary(selectedMonth, people, expenses, incomes, cards);
+  const peopleSummary = getPeopleMonthlySummary(selectedMonth, people, expenses, incomes, cards, fixedExpenses);
   const selectedPerson = people.find((person) => person.id === selectedPersonId);
 
   function openPerson(personId, mode) {
@@ -146,6 +146,7 @@ export default function PeoplePageDRE({ selectedPersonIdFromDashboard, clearSele
         incomes={incomes}
         categories={categories}
         cards={cards}
+        fixedExpenses={fixedExpenses}
         mode={detailMode}
         onClose={() => setSelectedPersonId("")}
       />

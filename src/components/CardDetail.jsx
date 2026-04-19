@@ -3,9 +3,9 @@ import SummaryCard from "./SummaryCard";
 import { useMonth } from "../context/MonthContext";
 import { getCardMonthlySummary } from "../services/financeLogic";
 
-export default function CardDetail({ cardId, expenses, cards, categories, people, onClose }) {
+export default function CardDetail({ cardId, expenses, fixedExpenses = [], cards, categories, people, onClose }) {
   const { selectedMonth, selectedMonthLabel, previousMonth, nextMonth } = useMonth();
-  const summary = getCardMonthlySummary(cardId, selectedMonth, expenses, cards);
+  const summary = getCardMonthlySummary(cardId, selectedMonth, expenses, cards, fixedExpenses);
 
   if (!summary.card) return null;
 

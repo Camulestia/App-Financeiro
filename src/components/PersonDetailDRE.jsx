@@ -4,7 +4,7 @@ import { useMonth } from "../context/MonthContext";
 import { getPersonMonthlySummary } from "../services/financeLogic";
 import { formatCurrency, formatDate } from "../utils/formatters";
 
-export default function PersonDetailDRE({ person, expenses, incomes, categories, cards, mode = "detalhes", onClose }) {
+export default function PersonDetailDRE({ person, expenses, incomes, categories, cards, fixedExpenses = [], mode = "detalhes", onClose }) {
   const { selectedMonth, selectedMonthLabel, previousMonth, nextMonth } = useMonth();
 
   if (!person) {
@@ -15,7 +15,7 @@ export default function PersonDetailDRE({ person, expenses, incomes, categories,
     );
   }
 
-  const summary = getPersonMonthlySummary(person.id, selectedMonth, expenses, incomes, cards);
+  const summary = getPersonMonthlySummary(person.id, selectedMonth, expenses, incomes, cards, fixedExpenses);
   const categoryTotals = categories
     .map((category) => ({
       category,

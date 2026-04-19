@@ -6,9 +6,9 @@ import { formatCurrency } from "../utils/formatters";
 import { getCardInvoiceSummaries, getMonthlySummary, getUpcomingInstallments } from "../utils/installmentUtils";
 
 export default function ChartsPageMonth() {
-  const { expenses, incomes, categories, people, cards } = useFinance();
+  const { expenses, incomes, categories, people, cards, fixedExpenses } = useFinance();
   const { selectedMonth, selectedMonthLabel } = useMonth();
-  const summaries = getMonthlySummary(expenses, incomes, cards);
+  const summaries = getMonthlySummary(expenses, incomes, cards, fixedExpenses, { monthKey: selectedMonth });
   const current = summaries.find((summary) => summary.monthKey === selectedMonth);
   const currentExpenses = current?.expenses || [];
   const byCategory = categories
@@ -31,7 +31,7 @@ export default function ChartsPageMonth() {
       "Saldo por mês": current?.saldo || 0,
     },
   ];
-  const invoices = getCardInvoiceSummaries(expenses, cards, selectedMonth).map((summary) => ({
+  const invoices = getCardInvoiceSummaries(expenses, cards, selectedMonth, fixedExpenses).map((summary) => ({
     name: summary.card.nome,
     "Faturas por cartão": summary.total,
   }));

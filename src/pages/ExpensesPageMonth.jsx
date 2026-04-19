@@ -14,6 +14,7 @@ export default function ExpensesPageMonth() {
     categories,
     people,
     cards,
+    fixedExpenses,
     addExpense,
     updateExpense,
     addInstallmentGroup,
@@ -77,7 +78,7 @@ export default function ExpensesPageMonth() {
       </div>
 
       <div className="space-y-6">
-        <CardInvoiceSummary expenses={expenses} cards={cards} monthKey={selectedMonth} />
+        <CardInvoiceSummary expenses={expenses} fixedExpenses={fixedExpenses} cards={cards} monthKey={selectedMonth} />
         <section className="card p-4">
           <h2 className="mb-4 text-lg font-bold text-slate-950 dark:text-white">Gastos do mês</h2>
           {monthExpenses.length ? (

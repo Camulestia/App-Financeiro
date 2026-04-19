@@ -1,8 +1,8 @@
 import { formatCurrency } from "../utils/formatters";
 import { getCardInvoiceSummaries, getMonthLabel } from "../utils/installmentUtils";
 
-export default function CardInvoiceSummary({ expenses, cards, monthKey, title = "Faturas do mês" }) {
-  const summaries = getCardInvoiceSummaries(expenses, cards, monthKey);
+export default function CardInvoiceSummary({ expenses, fixedExpenses = [], cards, monthKey, title = "Faturas do mês" }) {
+  const summaries = getCardInvoiceSummaries(expenses, cards, monthKey, fixedExpenses);
 
   return (
     <section className="card p-4">

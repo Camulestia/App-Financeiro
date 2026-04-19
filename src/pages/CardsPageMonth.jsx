@@ -9,12 +9,12 @@ import { useMonth } from "../context/MonthContext";
 import { getCardsMonthlyOverview } from "../services/financeLogic";
 
 export default function CardsPageMonth() {
-  const { cards, expenses, categories, people, addCard, removeCard } = useFinance();
+  const { cards, expenses, fixedExpenses, categories, people, addCard, removeCard } = useFinance();
   const { selectedMonth, selectedMonthLabel } = useMonth();
   const [form, setForm] = useState({ nome: "", fechamento: "" });
   const [errors, setErrors] = useState({});
   const [selectedCardId, setSelectedCardId] = useState("");
-  const overview = getCardsMonthlyOverview(selectedMonth, expenses, cards);
+  const overview = getCardsMonthlyOverview(selectedMonth, expenses, cards, fixedExpenses);
 
   async function submit(event) {
     event.preventDefault();
@@ -122,6 +122,7 @@ export default function CardsPageMonth() {
           cards={cards}
           categories={categories}
           people={people}
+          fixedExpenses={fixedExpenses}
           onClose={() => setSelectedCardId("")}
         />
       ) : null}

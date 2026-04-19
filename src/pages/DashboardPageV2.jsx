@@ -7,9 +7,9 @@ import { formatCurrency, formatDate } from "../utils/formatters";
 import { getMonthKey, getMonthlySummary } from "../utils/installmentUtils";
 
 export default function DashboardPageV2() {
-  const { expenses, incomes, categories, cards } = useFinance();
+  const { expenses, incomes, categories, cards, fixedExpenses } = useFinance();
   const currentMonthKey = getMonthKey(new Date().toISOString());
-  const summaries = getMonthlySummary(expenses, incomes, cards);
+  const summaries = getMonthlySummary(expenses, incomes, cards, fixedExpenses, { monthKey: currentMonthKey });
   const current = summaries.find((item) => item.monthKey === currentMonthKey) || {
     totalReceitas: 0,
     totalGastos: 0,
@@ -51,7 +51,7 @@ export default function DashboardPageV2() {
         )}
       </section>
 
-      <CardInvoiceSummary expenses={expenses} cards={cards} monthKey={currentMonthKey} />
+      <CardInvoiceSummary expenses={expenses} fixedExpenses={fixedExpenses} cards={cards} monthKey={currentMonthKey} />
 
       <section className="card p-4">
         <h2 className="mb-4 text-lg font-bold text-slate-950 dark:text-white">Parcelas do mês atual</h2>

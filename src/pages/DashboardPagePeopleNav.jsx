@@ -25,9 +25,9 @@ function getPersonSummary(people, expenses, incomes, selectedMonth) {
 }
 
 export default function DashboardPagePeopleNav({ onOpenPersonDetail }) {
-  const { expenses, incomes, categories, cards, people } = useFinance();
+  const { expenses, incomes, categories, cards, people, fixedExpenses } = useFinance();
   const { selectedMonth, selectedMonthLabel } = useMonth();
-  const summaries = getMonthlySummary(expenses, incomes, cards);
+  const summaries = getMonthlySummary(expenses, incomes, cards, fixedExpenses, { monthKey: selectedMonth });
   const current = summaries.find((item) => item.monthKey === selectedMonth) || {
     totalReceitas: 0,
     totalGastos: 0,
@@ -94,7 +94,7 @@ export default function DashboardPagePeopleNav({ onOpenPersonDetail }) {
         )}
       </section>
 
-      <CardInvoiceSummary expenses={expenses} cards={cards} monthKey={selectedMonth} />
+      <CardInvoiceSummary expenses={expenses} fixedExpenses={fixedExpenses} cards={cards} monthKey={selectedMonth} />
 
       <section className="card p-4">
         <h2 className="mb-4 text-lg font-bold text-slate-950 dark:text-white">Parcelas do mês selecionado</h2>
