@@ -5,11 +5,19 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+app.setName("Financas Pessoais");
+
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 const productionIndexPath = path.join(__dirname, "../dist/index.html");
 const TABLES = ["expenses", "incomes", "categories", "people", "cards", "fixedExpenses"];
 let sqliteDatabase = null;
 let sqliteAvailable = false;
+let sqlitePath = "";
+let sqliteInitializationPromise = null;
+
+function logDatabase(message, details = {}) {
+  console.log(`[SQLite] ${message}`, details);
+}
 
 async function loadSQLiteDriver() {
   try {
@@ -35,21 +43,50 @@ function createTables() {
   });
 }
 
-async function initializeSQLite() {
-  if (sqliteDatabase) return { available: sqliteAvailable };
+function getRowCounts() {
+  if (!sqliteDatabase) return {};
+  return Object.fromEntries(
+    TABLES.map((tableName) => {
+      const row = sqliteDatabase.prepare(`SELECT COUNT(*) AS total FROM ${tableName}`).get();
+      return [tableName, row?.total || 0];
+    }),
+  );
+}
 
+async function initializeSQLite() {
+  if (sqliteDatabase) return { available: sqliteAvailable, path: sqlitePath, counts: getRowCounts() };
+  if (sqliteInitializationPromise) return sqliteInitializationPromise;
+
+  sqliteInitializationPromise = openSQLite();
+  const status = await sqliteInitializationPromise;
+  if (!status.available) sqliteInitializationPromise = null;
+  return status;
+}
+
+async function openSQLite() {
   const driver = await loadSQLiteDriver();
   if (!driver?.DatabaseSync) {
     sqliteAvailable = false;
-    return { available: false, reason: "SQLite nativo indisponível neste runtime" };
+    const reason = "SQLite nativo indisponivel neste runtime";
+    logDatabase("falha ao inicializar", { reason });
+    return { available: false, reason, path: sqlitePath, counts: {} };
   }
 
   const databaseDirectory = path.join(app.getPath("userData"), "database");
   fs.mkdirSync(databaseDirectory, { recursive: true });
-  sqliteDatabase = new driver.DatabaseSync(path.join(databaseDirectory, "financas.sqlite"));
+  sqlitePath = path.join(databaseDirectory, "financas.db");
+  const legacySqlitePath = path.join(databaseDirectory, "financas.sqlite");
+  if (!fs.existsSync(sqlitePath) && fs.existsSync(legacySqlitePath)) {
+    fs.copyFileSync(legacySqlitePath, sqlitePath);
+  }
+  sqliteDatabase = new driver.DatabaseSync(sqlitePath);
   sqliteAvailable = true;
+  sqliteDatabase.exec("PRAGMA journal_mode = WAL");
+  sqliteDatabase.exec("PRAGMA synchronous = NORMAL");
   createTables();
-  return { available: true };
+  const counts = getRowCounts();
+  logDatabase("inicializado", { path: sqlitePath, counts });
+  return { available: true, path: sqlitePath, counts };
 }
 
 function parseRows(rows) {
@@ -58,6 +95,13 @@ function parseRows(rows) {
 
 function setupDatabaseHandlers() {
   ipcMain.handle("database:initialize", () => initializeSQLite());
+  ipcMain.handle("database:getInfo", async () => {
+    return initializeSQLite();
+  });
+  ipcMain.handle("database:countRows", async () => {
+    const status = await initializeSQLite();
+    return status.available ? getRowCounts() : {};
+  });
   ipcMain.handle("database:isAvailable", async () => {
     const status = await initializeSQLite();
     return Boolean(status.available);
@@ -65,14 +109,15 @@ function setupDatabaseHandlers() {
   ipcMain.handle("database:getAll", async (_event, tableName) => {
     assertTableName(tableName);
     const status = await initializeSQLite();
-    if (!status.available) return [];
+    if (!status.available) throw new Error(status.reason || "SQLite indisponivel");
     const rows = sqliteDatabase.prepare(`SELECT data FROM ${tableName} ORDER BY updatedAt DESC`).all();
+    logDatabase("leitura", { tableName, rows: rows.length, path: sqlitePath });
     return parseRows(rows);
   });
   ipcMain.handle("database:save", async (_event, tableName, record) => {
     assertTableName(tableName);
     const status = await initializeSQLite();
-    if (!status.available) return null;
+    if (!status.available) throw new Error(status.reason || "SQLite indisponivel");
     const nextRecord = {
       ...record,
       id: record.id || randomUUID(),
@@ -81,12 +126,13 @@ function setupDatabaseHandlers() {
     sqliteDatabase
       .prepare(`INSERT OR REPLACE INTO ${tableName} (id, data, updatedAt) VALUES (?, ?, ?)`)
       .run(nextRecord.id, JSON.stringify(nextRecord), nextRecord.updatedAt);
+    logDatabase("salvou registro", { tableName, id: nextRecord.id, counts: getRowCounts() });
     return nextRecord;
   });
   ipcMain.handle("database:replaceAll", async (_event, tableName, records) => {
     assertTableName(tableName);
     const status = await initializeSQLite();
-    if (!status.available) return [];
+    if (!status.available) throw new Error(status.reason || "SQLite indisponivel");
     const items = Array.isArray(records) ? records : [];
     try {
       sqliteDatabase.exec("BEGIN TRANSACTION");
@@ -101,6 +147,7 @@ function setupDatabaseHandlers() {
         insert.run(nextRecord.id, JSON.stringify(nextRecord), nextRecord.updatedAt);
       });
       sqliteDatabase.exec("COMMIT");
+      logDatabase("substituiu tabela", { tableName, rows: items.length, counts: getRowCounts() });
     } catch (error) {
       sqliteDatabase.exec("ROLLBACK");
       throw error;
@@ -110,8 +157,9 @@ function setupDatabaseHandlers() {
   ipcMain.handle("database:remove", async (_event, tableName, id) => {
     assertTableName(tableName);
     const status = await initializeSQLite();
-    if (!status.available) return false;
+    if (!status.available) throw new Error(status.reason || "SQLite indisponivel");
     sqliteDatabase.prepare(`DELETE FROM ${tableName} WHERE id = ?`).run(id);
+    logDatabase("removeu registro", { tableName, id, counts: getRowCounts() });
     return true;
   });
 }
@@ -124,7 +172,7 @@ function createWindow() {
     minHeight: 620,
     title: "Financas Pessoais",
     webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
+      preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -145,9 +193,9 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   setupDatabaseHandlers();
-  initializeSQLite();
+  await initializeSQLite();
   createWindow();
 
   app.on("activate", () => {
@@ -157,4 +205,13 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", () => {
+  if (sqliteDatabase) {
+    sqliteDatabase.close();
+    sqliteDatabase = null;
+    sqliteAvailable = false;
+    sqliteInitializationPromise = null;
+  }
 });

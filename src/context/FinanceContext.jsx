@@ -3,6 +3,7 @@ import {
   exportAllData,
   getCards,
   getCategories,
+  getDatabaseDiagnostics,
   getExpenses,
   getFixedExpenses,
   getIncomes,
@@ -43,16 +44,35 @@ export function FinanceProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   async function refresh() {
-    const [expenses, incomes, categories, people, cards, fixedExpenses] = await Promise.all([
-      getExpenses(),
-      getIncomes(),
-      getCategories(),
-      getPeople(),
-      getCards(),
-      getFixedExpenses(),
-    ]);
-    setState({ expenses, incomes, categories, people, cards, fixedExpenses });
-    setLoading(false);
+    try {
+      const [expenses, incomes, categories, people, cards, fixedExpenses] = await Promise.all([
+        getExpenses(),
+        getIncomes(),
+        getCategories(),
+        getPeople(),
+        getCards(),
+        getFixedExpenses(),
+      ]);
+      const diagnostics = await getDatabaseDiagnostics();
+      console.info("[Dados] estado carregado", {
+        origem: diagnostics.origem,
+        counts: diagnostics.counts,
+        stateRows: {
+          expenses: expenses.length,
+          incomes: incomes.length,
+          categories: categories.length,
+          people: people.length,
+          cards: cards.length,
+          fixedExpenses: fixedExpenses.length,
+        },
+      });
+      setState({ expenses, incomes, categories, people, cards, fixedExpenses });
+    } catch (error) {
+      console.error("[Dados] falha ao carregar dados persistidos", error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {

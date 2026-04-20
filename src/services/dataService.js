@@ -1,8 +1,11 @@
 import { defaultCategories } from "../utils/defaultCategories";
 import {
+  countSQLiteRows,
   deleteSQLiteRecord,
   getSQLiteRecords,
-  initializeSQLite,
+  getSQLiteInfo,
+  hasSQLiteBridge,
+  isElectronApp,
   isSQLiteAvailable,
   replaceSQLiteRecords,
   saveSQLiteRecord,
@@ -17,6 +20,10 @@ const memoryData = Object.fromEntries(STORES.map((store) => [store, []]));
 
 let sqliteReadyPromise = null;
 
+function logData(message, details = {}) {
+  console.info(`[Dados] ${message}`, details);
+}
+
 function createRecord(item) {
   return {
     ...item,
@@ -27,11 +34,25 @@ function createRecord(item) {
 
 async function shouldUseSQLite() {
   if (!sqliteReadyPromise) {
-    sqliteReadyPromise = initializeSQLite()
-      .then((status) => Boolean(status.available))
-      .catch(() => false);
+    sqliteReadyPromise = getSQLiteInfo()
+      .then((status) => {
+        if (status.available) {
+          logData("SQLite conectado", { path: status.path, counts: status.counts });
+        } else {
+          logData("SQLite indisponivel", { reason: status.reason });
+        }
+        return Boolean(status.available);
+      })
+      .catch((error) => {
+        console.error("Erro ao inicializar SQLite:", error);
+        return false;
+      });
   }
-  return (await sqliteReadyPromise) && (await isSQLiteAvailable());
+  const available = (await sqliteReadyPromise) && (await isSQLiteAvailable());
+  if (!available && (hasSQLiteBridge() || isElectronApp())) {
+    throw new Error("SQLite indisponivel no Electron");
+  }
+  return available;
 }
 
 
@@ -70,26 +91,43 @@ function normalizeBackupPayload(fileData) {
 }
 
 async function getAll(storeName) {
-  if (await shouldUseSQLite()) return getSQLiteRecords(storeName);
+  if (await shouldUseSQLite()) {
+    const records = await getSQLiteRecords(storeName);
+    logData("carga inicial do SQLite", { storeName, rows: records.length });
+    return records;
+  }
+  logData("carga em memoria", { storeName, rows: memoryData[storeName]?.length || 0 });
   return memoryData[storeName] || [];
 }
 
 async function setAll(storeName, items) {
-  if (await shouldUseSQLite()) return replaceSQLiteRecords(storeName, items);
+  if (await shouldUseSQLite()) {
+    logData("substituindo dados no SQLite", { storeName, rows: items.length });
+    return replaceSQLiteRecords(storeName, items);
+  }
+  logData("substituindo dados em memoria", { storeName, rows: items.length });
   memoryData[storeName] = items;
   return items;
 }
 
 async function saveItem(storeName, item) {
   const record = createRecord(item);
-  if (await shouldUseSQLite()) return saveSQLiteRecord(storeName, record);
+  if (await shouldUseSQLite()) {
+    logData("salvando no SQLite", { storeName, id: record.id });
+    return saveSQLiteRecord(storeName, record);
+  }
+  logData("salvando em memoria", { storeName, id: record.id });
   const items = memoryData[storeName].filter((current) => current.id !== record.id);
   memoryData[storeName] = [...items, record];
   return record;
 }
 
 async function deleteItem(storeName, id) {
-  if (await shouldUseSQLite()) return deleteSQLiteRecord(storeName, id);
+  if (await shouldUseSQLite()) {
+    logData("removendo do SQLite", { storeName, id });
+    return deleteSQLiteRecord(storeName, id);
+  }
+  logData("removendo da memoria", { storeName, id });
   memoryData[storeName] = memoryData[storeName].filter((item) => item.id !== id);
   return true;
 }
@@ -188,6 +226,14 @@ export async function exportAllData() {
     origem: (await shouldUseSQLite()) ? "sqlite" : "memoria",
     dados: data,
     configuracoes: getAppSettings(),
+  };
+}
+
+export async function getDatabaseDiagnostics() {
+  if (!(await shouldUseSQLite())) return { origem: "memoria", counts: {} };
+  return {
+    origem: "sqlite",
+    counts: await countSQLiteRows(),
   };
 }
 
