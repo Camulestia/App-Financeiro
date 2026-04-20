@@ -7,25 +7,15 @@ import {
   replaceSQLiteRecords,
   saveSQLiteRecord,
 } from "./sqliteService";
-import * as storageService from "./storageService";
 
 const STORES = ["expenses", "incomes", "categories", "people", "cards", "fixedExpenses"];
-const SQLITE_STORES = ["people", "cards", "incomes", "fixedExpenses", "expenses"];
-const STORE_GETTERS = {
-  expenses: storageService.getExpenses,
-  incomes: storageService.getIncomes,
-  categories: storageService.getCategories,
-  people: storageService.getPeople,
-  cards: storageService.getCards,
-  fixedExpenses: storageService.getFixedExpenses,
-};
 const SETTINGS = [
   { key: "selectedMonth", localStorageKey: "financas:mesSelecionado" },
   { key: "theme", localStorageKey: "financas:tema" },
 ];
+const memoryData = Object.fromEntries(STORES.map((store) => [store, []]));
 
-let providerPromise = null;
-const sqliteSeedPromises = {};
+let sqliteReadyPromise = null;
 
 function createRecord(item) {
   return {
@@ -35,54 +25,15 @@ function createRecord(item) {
   };
 }
 
-async function getProvider() {
-  if (!providerPromise) {
-    providerPromise = initializeSQLite()
-      .then((status) => (status.available ? "sqlite" : "legacy"))
-      .catch(() => "legacy");
-  }
-  return providerPromise;
-}
-
 async function shouldUseSQLite() {
-  const provider = await getProvider();
-  if (provider !== "sqlite") return false;
-  return isSQLiteAvailable();
-}
-
-async function shouldUseSQLiteStore(storeName) {
-  return SQLITE_STORES.includes(storeName) && (await shouldUseSQLite());
-}
-
-async function seedSQLiteStoreFromLegacyIfNeeded(storeName) {
-  if (!(await shouldUseSQLiteStore(storeName))) return;
-  if (!sqliteSeedPromises[storeName]) {
-    sqliteSeedPromises[storeName] = (async () => {
-      const sqliteItems = await getSQLiteRecords(storeName);
-      if (sqliteItems.length) return;
-
-      const legacyItems = await STORE_GETTERS[storeName]();
-      if (legacyItems.length) await replaceSQLiteRecords(storeName, legacyItems);
-    })().catch(() => null);
+  if (!sqliteReadyPromise) {
+    sqliteReadyPromise = initializeSQLite()
+      .then((status) => Boolean(status.available))
+      .catch(() => false);
   }
-  await sqliteSeedPromises[storeName];
+  return (await sqliteReadyPromise) && (await isSQLiteAvailable());
 }
 
-async function mirrorLegacy(operation) {
-  try {
-    await operation();
-  } catch {
-    // O storage antigo fica como compatibilidade; falhas nele não devem bloquear o SQLite.
-  }
-}
-
-async function replaceLegacyStore(storeName, items) {
-  const data = {};
-  for (const store of STORES) {
-    data[store] = store === storeName ? items : await STORE_GETTERS[store]();
-  }
-  await storageService.importAllData({ dados: data });
-}
 
 function getAppSettings() {
   if (typeof localStorage === "undefined") return {};
@@ -119,43 +70,28 @@ function normalizeBackupPayload(fileData) {
 }
 
 async function getAll(storeName) {
-  if (await shouldUseSQLiteStore(storeName)) {
-    await seedSQLiteStoreFromLegacyIfNeeded(storeName);
-    return getSQLiteRecords(storeName);
-  }
-  return STORE_GETTERS[storeName]();
+  if (await shouldUseSQLite()) return getSQLiteRecords(storeName);
+  return memoryData[storeName] || [];
 }
 
 async function setAll(storeName, items) {
-  if (await shouldUseSQLiteStore(storeName)) {
-    await replaceSQLiteRecords(storeName, items);
-    await mirrorLegacy(() => replaceLegacyStore(storeName, items));
-    return items;
-  }
-  await replaceLegacyStore(storeName, items);
+  if (await shouldUseSQLite()) return replaceSQLiteRecords(storeName, items);
+  memoryData[storeName] = items;
   return items;
 }
 
-async function saveItem(storeName, item, legacySave) {
+async function saveItem(storeName, item) {
   const record = createRecord(item);
-
-  if (await shouldUseSQLiteStore(storeName)) {
-    await seedSQLiteStoreFromLegacyIfNeeded(storeName);
-    await saveSQLiteRecord(storeName, record);
-    await mirrorLegacy(() => legacySave(record));
-    return record;
-  }
-  return legacySave(record);
+  if (await shouldUseSQLite()) return saveSQLiteRecord(storeName, record);
+  const items = memoryData[storeName].filter((current) => current.id !== record.id);
+  memoryData[storeName] = [...items, record];
+  return record;
 }
 
 async function deleteItem(storeName, id) {
-  if (await shouldUseSQLiteStore(storeName)) {
-    await seedSQLiteStoreFromLegacyIfNeeded(storeName);
-    await deleteSQLiteRecord(storeName, id);
-    await mirrorLegacy(() => storageService.removeRecord(storeName, id));
-    return true;
-  }
-  return storageService.removeRecord(storeName, id);
+  if (await shouldUseSQLite()) return deleteSQLiteRecord(storeName, id);
+  memoryData[storeName] = memoryData[storeName].filter((item) => item.id !== id);
+  return true;
 }
 
 export const getExpenses = () => getAll("expenses");
@@ -171,34 +107,25 @@ export async function getCategories() {
   return defaultCategories;
 }
 
-export const saveExpense = (expense) => saveItem("expenses", expense, storageService.saveExpense);
+export const saveExpense = (expense) => saveItem("expenses", expense);
 export const updateExpense = saveExpense;
 export const deleteExpense = (id) => deleteItem("expenses", id);
-export const saveIncome = (income) => saveItem("incomes", income, storageService.saveIncome);
-export const saveCard = (card) => saveItem("cards", card, storageService.saveCard);
-export const saveCategory = (category) => saveItem("categories", category, storageService.saveCategory);
-export const saveFixedExpense = (fixedExpense) =>
-  saveItem("fixedExpenses", fixedExpense, storageService.saveFixedExpense);
+export const saveIncome = (income) => saveItem("incomes", income);
+export const saveCard = (card) => saveItem("cards", card);
+export const saveCategory = (category) => saveItem("categories", category);
+export const saveFixedExpense = (fixedExpense) => saveItem("fixedExpenses", fixedExpense);
 export const updateFixedExpense = saveFixedExpense;
 export const deleteFixedExpense = (id) => deleteItem("fixedExpenses", id);
 
 export async function saveExpenses(expenses) {
-  if (await shouldUseSQLiteStore("expenses")) {
-    await seedSQLiteStoreFromLegacyIfNeeded("expenses");
-    const records = expenses.map(createRecord);
-    const current = await getSQLiteRecords("expenses");
-    await replaceSQLiteRecords("expenses", [...current, ...records]);
-    await mirrorLegacy(() => storageService.saveExpenses(records));
-    return records;
-  }
-
-  const saved = [];
-  for (const expense of expenses) saved.push(await saveExpense(expense));
-  return saved;
+  const records = expenses.map(createRecord);
+  const current = await getExpenses();
+  await setAll("expenses", [...current, ...records]);
+  return records;
 }
 
 export async function savePerson(person) {
-  if (!person.isDefault) return saveItem("people", person, storageService.savePerson);
+  if (!person.isDefault) return saveItem("people", person);
 
   const people = await getPeople();
   const saved = createRecord({ ...person, isDefault: true });
@@ -207,14 +134,8 @@ export async function savePerson(person) {
     .map((current) => ({ ...current, isDefault: false }));
   const nextPeople = [...updated, saved];
 
-  if (await shouldUseSQLiteStore("people")) {
-    await seedSQLiteStoreFromLegacyIfNeeded("people");
-    await replaceSQLiteRecords("people", nextPeople);
-    await mirrorLegacy(() => replaceLegacyStore("people", nextPeople));
-    return saved;
-  }
-
-  return storageService.savePerson(saved);
+  await setAll("people", nextPeople);
+  return saved;
 }
 
 export async function setDefaultPerson(personId) {
@@ -224,14 +145,8 @@ export async function setDefaultPerson(personId) {
     updatedAt: new Date().toISOString(),
   }));
 
-  if (await shouldUseSQLiteStore("people")) {
-    await seedSQLiteStoreFromLegacyIfNeeded("people");
-    await replaceSQLiteRecords("people", updated);
-    await mirrorLegacy(() => replaceLegacyStore("people", updated));
-    return updated;
-  }
-
-  return storageService.setDefaultPerson(personId);
+  await setAll("people", updated);
+  return updated;
 }
 
 export async function getPersonById(personId) {
@@ -270,7 +185,7 @@ export async function exportAllData() {
   return {
     versao: 2,
     exportadoEm: new Date().toISOString(),
-    origem: (await shouldUseSQLite()) ? "sqlite" : "storage",
+    origem: (await shouldUseSQLite()) ? "sqlite" : "memoria",
     dados: data,
     configuracoes: getAppSettings(),
   };
@@ -279,16 +194,7 @@ export async function exportAllData() {
 export async function importAllData(fileData) {
   const { data, settings } = normalizeBackupPayload(fileData);
 
-  if (await shouldUseSQLite()) {
-    for (const store of SQLITE_STORES) {
-      await replaceSQLiteRecords(store, data[store]);
-    }
-    await storageService.importAllData({ dados: data });
-    restoreAppSettings(settings);
-    return true;
-  }
-
-  await storageService.importAllData({ dados: data });
+  for (const store of STORES) await setAll(store, data[store]);
   restoreAppSettings(settings);
   return true;
 }

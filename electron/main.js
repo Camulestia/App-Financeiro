@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
+const productionIndexPath = path.join(__dirname, "../dist/index.html");
 const TABLES = ["expenses", "incomes", "categories", "people", "cards", "fixedExpenses"];
 let sqliteDatabase = null;
 let sqliteAvailable = false;
@@ -121,7 +122,7 @@ function createWindow() {
     height: 820,
     minWidth: 900,
     minHeight: 620,
-    title: "Finanças Pessoais",
+    title: "Financas Pessoais",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -129,10 +130,18 @@ function createWindow() {
     },
   });
 
+  window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+    console.error("Falha ao carregar a janela:", { errorCode, errorDescription, validatedURL });
+  });
+
+  window.webContents.on("render-process-gone", (_event, details) => {
+    console.error("Processo de renderização encerrado:", details);
+  });
+
   if (isDev) {
     window.loadURL("http://localhost:5173");
   } else {
-    window.loadFile(path.join(__dirname, "../dist/index.html"));
+    window.loadFile(productionIndexPath);
   }
 }
 

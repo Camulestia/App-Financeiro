@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { addMonthsToMonthKey, getMonthKey, getMonthLabel } from "../utils/installmentUtils";
 
 const MonthContext = createContext(null);
@@ -21,17 +21,14 @@ export function MonthProvider({ children }) {
     setSelectedMonthState(monthKey || getMonthKey(new Date().toISOString()));
   }
 
-  const value = useMemo(
-    () => ({
-      selectedMonth,
-      selectedMonthLabel: getMonthLabel(selectedMonth),
-      getSelectedMonth,
-      setSelectedMonth,
-      previousMonth: () => setSelectedMonthState((current) => addMonthsToMonthKey(current, -1)),
-      nextMonth: () => setSelectedMonthState((current) => addMonthsToMonthKey(current, 1)),
-    }),
-    [selectedMonth],
-  );
+  const value = {
+    selectedMonth,
+    selectedMonthLabel: getMonthLabel(selectedMonth),
+    getSelectedMonth,
+    setSelectedMonth,
+    previousMonth: () => setSelectedMonthState((current) => addMonthsToMonthKey(current, -1)),
+    nextMonth: () => setSelectedMonthState((current) => addMonthsToMonthKey(current, 1)),
+  };
 
   return <MonthContext.Provider value={value}>{children}</MonthContext.Provider>;
 }

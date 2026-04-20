@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import {
   exportAllData,
   getCards,
@@ -69,7 +69,8 @@ export function FinanceProvider({ children }) {
 
   async function updateExpense(expense) {
     const card = state.cards.find((item) => item.id === expense.cartao);
-    const { billingMonthKey, ...expenseForRecalculation } = expense;
+    const expenseForRecalculation = { ...expense };
+    delete expenseForRecalculation.billingMonthKey;
     await saveExpense(normalizeExpenseForBilling(expenseForRecalculation, card ? [card] : []));
     await refresh();
   }
@@ -98,8 +99,7 @@ export function FinanceProvider({ children }) {
     await refresh();
   }
 
-  const value = useMemo(
-    () => ({
+  const value = {
       ...state,
       loading,
       refresh,
@@ -156,9 +156,7 @@ export function FinanceProvider({ children }) {
         await importAllData(payload);
         await refresh();
       },
-    }),
-    [state, loading],
-  );
+  };
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>;
 }
